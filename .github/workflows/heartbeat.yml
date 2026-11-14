@@ -1,7 +1,7 @@
 name: Ops Heartbeat
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions: {}
@@ -9,16 +9,23 @@ permissions: {}
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
-      - name: Trigger endpoint
+      - name: Trigger Elementix Drop-off & Inbound Sync + CallRail Missed Catcher
         env:
           TARGET_URL: ${{ secrets.TARGET_URL }}
           TARGET_TOKEN: ${{ secrets.TARGET_TOKEN }}
         run: |
-          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 25 -H "Authorization: Bearer $TARGET_TOKEN" "$TARGET_URL")
-          echo "Heartbeat HTTP status: $STATUS"
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 45 -H "Authorization: Bearer $TARGET_TOKEN" "$TARGET_URL")
+          echo "Sync HTTP status: $STATUS"
           if [ "$STATUS" != "200" ]; then
-            echo "::error::Worker returned HTTP $STATUS"
+            echo "::error::Sync worker returned HTTP $STATUS"
             exit 1
+          fi
+
+          # Also ping /api/callrail-missed backup endpoint (idempotent via scratchpad)
+          MISSED_URL="${TARGET_URL%/sync}/callrail-missed"
+          if [ "$MISSED_URL" != "$TARGET_URL" ]; then
+            M_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 55 -H "Authorization: Bearer $TARGET_TOKEN" "$MISSED_URL")
+            echo "CallRail Missed HTTP status: $M_STATUS"
           fi
